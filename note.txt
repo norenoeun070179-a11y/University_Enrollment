@@ -1,0 +1,1 @@
+cd /mnt/p/Test_Program/Learn_Typescript/test-types
