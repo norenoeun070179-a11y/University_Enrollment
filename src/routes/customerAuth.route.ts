@@ -30,13 +30,16 @@ router.get(
       }
     );
 
-    res.cookie("token" , token,{
+    const isProduction = process.env.NODE_ENV === "production";
+
+    res.cookie("token", token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
+      secure: isProduction,
+      sameSite: isProduction ? "none" : "lax",
       maxAge: 24 * 60 * 60 * 1000,
+      path: "/",
     });
-    res.redirect(`process.env.FRONTEND_URL}/`)
+    res.redirect(`${process.env.FRONTEND_URL || ""}/`);
   }
 );
 

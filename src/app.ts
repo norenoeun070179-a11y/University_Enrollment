@@ -10,7 +10,7 @@ const cors = require("cors");
 import passport from "./config/passport";
 
 const app = express();
-// app.set("trust proxy", 1);
+app.set("trust proxy", 1);
 app.use(
   cors({   
     origin: true, // no wildcard

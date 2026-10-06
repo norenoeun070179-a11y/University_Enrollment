@@ -139,12 +139,14 @@ export const loginUser = async (req: Request, res: Response) => {
       process.env.JWT_SECRET as string,
       { expiresIn: "1d" }
     );
-    res.cookie("token", token ,{
+    const isProduction = process.env.NODE_ENV === "production";
+    res.cookie("token", token, {
       httpOnly: true,
-      secure: true,      // true នៅ Production (HTTPS)
-      sameSite: "none",    // "none" ប្រសិនបើ Frontend និង Backend នៅ Domain ខុសគ្នា + HTTPS
+      secure: isProduction,
+      sameSite: isProduction ? "none" : "lax",
       maxAge: 24 * 60 * 60 * 1000,
-    })
+      path: "/",
+    });
     return res.json({
       message: "Login success",
       user: {
@@ -207,12 +209,14 @@ export const adminLogin = async (req: Request, res: Response) => {
         expiresIn: "1d"
       }  
     );
-    res.cookie("token", token ,{
+    const isProduction = process.env.NODE_ENV === "production";
+    res.cookie("token", token, {
       httpOnly: true,
-      secure: true,      // true នៅ Production (HTTPS)
-      sameSite: "none",    // "none" ប្រសិនបើ Frontend និង Backend នៅ Domain ខុសគ្នា + HTTPS
+      secure: isProduction,
+      sameSite: isProduction ? "none" : "lax",
       maxAge: 24 * 60 * 60 * 1000,
-    })
+      path: "/",
+    });
 
     return res.status(200).json({
       message: "Admin login successful",
@@ -366,10 +370,11 @@ export const getProfile = async (
 
 export const logoutUser = async (req: Request, res: Response) => {
   try {
+    const isProduction = process.env.NODE_ENV === "production";
     res.clearCookie("token", {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
+      secure: isProduction,
+      sameSite: isProduction ? "none" : "lax",
       path: "/",
     });
 
