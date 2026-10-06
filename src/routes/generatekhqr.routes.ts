@@ -21,7 +21,7 @@ import { authMiddleware,allowAdminOnly,allowNormal } from "../middleware/auth.us
 import { customerAuth } from "../middleware/customerAuth";
 
 export const Payment = (app : express.Application) => {
-  app.get("/payment/:id",customerAuth,getPaymentByid)
+  app.get("/payment/:id", getPaymentByid)
 
   app.post("/payment",checkRegistration,authMiddleware,allowNormal,createCashPayment)
   app.get('/payment',authMiddleware,allowNormal,getPayments)

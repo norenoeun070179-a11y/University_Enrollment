@@ -94,13 +94,13 @@ Payment.belongsTo(Customer, {
 
 Student.hasMany(Payment, {
   foreignKey: "student_id",
-  onDelete: "RESTRICT",
+  onDelete: "CASCADE",
   onUpdate: "CASCADE"
 });
 
 Payment.belongsTo(Student, {
   foreignKey: "student_id",
-  onDelete: "RESTRICT",
+  onDelete: "CASCADE",
   onUpdate: "CASCADE"
 });
 

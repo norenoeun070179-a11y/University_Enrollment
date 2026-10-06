@@ -8,11 +8,16 @@ import { checkRegistration } from "../middleware/checkRegistration";
 
 export const Student = (app : express.Application) =>{
     app.post('/student',checkRegistration,authMiddleware,allowNormal,uploadStudentPhoto, createStudent);
-    app.post('/student/cus',checkRegistration,customerAuth,uploadStudentPhoto,globalLimiter, createStudent);
-    app.put('/student/:id',authMiddleware,allowNormal,uploadStudentPhoto, updateStudent)
-    app.delete('/student/:id',authMiddleware,allowNormal,deleteStudent)
+    app.post('/student/cus',checkRegistration,uploadStudentPhoto,globalLimiter, createStudent);
+
+    app.put('/student/:id',uploadStudentPhoto, updateStudent);
+    app.patch('/student/:id',uploadStudentPhoto, updateStudent);
+    app.put('/student/cus/:id',uploadStudentPhoto, updateStudent);
+    app.patch('/student/cus/:id',uploadStudentPhoto, updateStudent);
+
+    app.delete('/student/:id',authMiddleware,allowNormal,deleteStudent);
     
     app.get('/student',authMiddleware,allowNormal, getStudents);
-    app.get('/student/cus:id',customerAuth,getStudentProfile)
-    app.get('/student/:id',authMiddleware,allowNormal,getStudentProfile)
+    app.get('/student/cus/:id',getStudentProfile);
+    app.get('/student/:id',getStudentProfile);
 };

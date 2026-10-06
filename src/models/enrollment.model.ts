@@ -16,7 +16,7 @@ class Enrollment extends Model<
   declare student_id: number ;
   declare class_id: number | null;
   declare department_id: number;
-  declare year: string;
+  declare year: CreationOptional<number>;
   declare enrollment_date: string;
   declare status: string | null;
   declare payment_id: number ;
@@ -48,8 +48,9 @@ Enrollment.init(
     },
 
     year: {
-      type: DataTypes.STRING(20),
-      allowNull: false
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: () => new Date().getFullYear()
     },
 
     enrollment_date: {

@@ -9,8 +9,8 @@ export const Enrollment = (app : express.Application) => {
     app.get('/enroll',getEnrollments)
     app.get('/enroll/:id',getEnrollmentById)
 
-    app.post('/enroll/cus',validateEnrollment,checkRegistration,customerAuth,createEnrollment)
-    app.post('/enroll',checkRegistration,authMiddleware,allowNormal,createEnrollment)
+    app.post('/enroll/cus',validateEnrollment,checkRegistration,createEnrollment)
+    app.post('/enroll',checkRegistration,createEnrollment)
     app.put('/enroll/:id',authMiddleware,allowNormal,updateEnrollment)
     app.delete('/enroll/:id',authMiddleware,allowNormal,deleteEnrollment)
 

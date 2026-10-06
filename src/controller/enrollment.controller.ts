@@ -7,10 +7,24 @@
   import Payment from "../models/payment.model";
   import Setting from "../models/setting.model";
 
+const getEnrollmentYear = (academicYear: unknown): number => {
+  if (typeof academicYear === "number" && !Number.isNaN(academicYear)) {
+    return academicYear;
+  }
+  if (typeof academicYear === "string" && academicYear.trim() !== "") {
+    const parsed = parseInt(academicYear.trim(), 10);
+    if (!Number.isNaN(parsed)) {
+      return parsed;
+    }
+  }
+  return new Date().getFullYear();
+};
+
 export const createEnrollment = async (
   req: Request,
   res: Response
 ) => {
+  const transaction = await sequelize.transaction();
   try {
     const {
       student_id,
@@ -24,9 +38,10 @@ export const createEnrollment = async (
     // =========================
     // Student
     // =========================
-    const student = await Student.findByPk(student_id);
+    const student = await Student.findByPk(student_id, { transaction });
 
     if (!student) {
+      await transaction.rollback();
       return res.status(404).json({
         message: "Student not found."
       });
@@ -35,9 +50,10 @@ export const createEnrollment = async (
     // =========================
     // Class
     // =========================
-    const classRecord = await Class.findByPk(class_id);
+    const classRecord = await Class.findByPk(class_id, { transaction });
 
     if (!classRecord) {
+      await transaction.rollback();
       return res.status(404).json({
         message: "Class not found."
       });
@@ -46,11 +62,10 @@ export const createEnrollment = async (
     // =========================
     // Department
     // =========================
-    const department = await Department.findByPk(
-      department_id
-    );
+    const department = await Department.findByPk(department_id, { transaction });
 
     if (!department) {
+      await transaction.rollback();
       return res.status(404).json({
         message: "Department not found."
       });
@@ -59,29 +74,29 @@ export const createEnrollment = async (
     // =========================
     // Payment
     // =========================
-    const payment = await Payment.findByPk(
-      payment_id
-    );
+    const payment = await Payment.findByPk(payment_id, { transaction });
 
     if (!payment) {
+      await transaction.rollback();
       return res.status(404).json({
         message: "Payment not found."
       });
     }
 
     if (payment.status !== "paid") {
+      await transaction.rollback();
       return res.status(400).json({
-        message:
-          "Payment must be completed first."
+        message: "Payment must be completed first."
       });
     }
 
     // =========================
     // Setting
     // =========================
-    const setting = await Setting.findOne();
+    const setting = await Setting.findOne({ transaction });
 
     if (!setting) {
+      await transaction.rollback();
       return res.status(404).json({
         message: "System setting not found."
       });
@@ -90,54 +105,46 @@ export const createEnrollment = async (
     // =========================
     // Payment already used?
     // =========================
-    const usedPayment =
-      await Enrollment.findOne({
-        where: {
-          payment_id
-        }
-      });
+    const usedPayment = await Enrollment.findOne({
+      where: { payment_id },
+      transaction
+    });
 
     if (usedPayment) {
+      await transaction.rollback();
       return res.status(400).json({
-        message:
-          "This payment has already been used."
+        message: "This payment has already been used."
       });
     }
 
     // =========================
     // Already enrolled in this department?
     // =========================
-    const existingDepartmentEnrollment =
-      await Enrollment.findOne({
-        where: {
-          student_id,
-          department_id
-        }
-      });
+    const existingDepartmentEnrollment = await Enrollment.findOne({
+      where: {
+        student_id,
+        department_id
+      },
+      transaction
+    });
 
-    if (
-      existingDepartmentEnrollment
-    ) {
+    if (existingDepartmentEnrollment) {
+      await transaction.rollback();
       return res.status(400).json({
-        message:
-          "Student is already enrolled in this department."
+        message: "Student is already enrolled in this department."
       });
     }
 
     // =========================
     // Maximum enrollments
     // =========================
-    const totalEnrollments =
-      await Enrollment.count({
-        where: {
-          student_id
-        }
-      });
+    const totalEnrollments = await Enrollment.count({
+      where: { student_id },
+      transaction
+    });
 
-    if (
-      totalEnrollments >=
-      setting.max_enrollment_per_student
-    ) {
+    if (totalEnrollments >= setting.max_enrollment_per_student) {
+      await transaction.rollback();
       return res.status(400).json({
         message: `A student can enroll in only ${setting.max_enrollment_per_student} department(s).`
       });
@@ -146,17 +153,13 @@ export const createEnrollment = async (
     // =========================
     // Class capacity
     // =========================
-    const classCount =
-      await Enrollment.count({
-        where: {
-          class_id
-        }
-      });
+    const classCount = await Enrollment.count({
+      where: { class_id },
+      transaction
+    });
 
-    if (
-      classCount >=
-      setting.max_student_per_class
-    ) {
+    if (classCount >= setting.max_student_per_class) {
+      await transaction.rollback();
       return res.status(400).json({
         message: "This class is full."
       });
@@ -165,51 +168,46 @@ export const createEnrollment = async (
     // =========================
     // Department capacity
     // =========================
-    const departmentCount =
-      await Enrollment.count({
-        where: {
-          department_id
-        }
-      });
+    const departmentCount = await Enrollment.count({
+      where: { department_id },
+      transaction
+    });
 
-    if (
-      departmentCount >=
-      setting.max_student_per_department
-    ) {
+    if (departmentCount >= setting.max_student_per_department) {
+      await transaction.rollback();
       return res.status(400).json({
-        message:
-          "This department has reached its maximum capacity."
+        message: "This department has reached its maximum capacity."
       });
     }
 
     // =========================
     // Create Enrollment
     // =========================
-    const enrollment =
-      await Enrollment.create({
+    const enrollment = await Enrollment.create(
+      {
         student_id,
         class_id,
         department_id,
         payment_id,
-        year: setting.academic_year,
+        year: getEnrollmentYear(setting.academic_year),
         enrollment_date,
-        status
-      });
+        status: status || "active"
+      },
+      { transaction }
+    );
+
+    await transaction.commit();
 
     return res.status(201).json({
-      message:
-        "Enrollment created successfully.",
+      message: "Enrollment created successfully.",
       data: enrollment
     });
-
   } catch (error: any) {
-
-    console.error(error);
-
+    await transaction.rollback();
+    console.error("Create enrollment error:", error);
     return res.status(500).json({
-      message: error.message
+      message: error.message || "Failed to create enrollment"
     });
-
   }
 };
 
@@ -475,7 +473,7 @@ export const updateEnrollment = async (
       class_id,
       department_id,
       payment_id,
-      year: setting.academic_year,
+      year: getEnrollmentYear(setting.academic_year),
       enrollment_date,
       status
     });

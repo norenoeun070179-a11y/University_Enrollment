@@ -1,18 +1,11 @@
 import { Request, Response } from "express";
+import crypto from "crypto";
+import QRCode from "qrcode";
 import Payment from "../models/payment.model";
 import Customer from "../models/customer.model";
 import Student from "../models/student.model";
 import Department from "../models/department.model";
 import Setting from "../models/setting.model";
-import QRCode from "qrcode";
-import cron from "node-cron";
-import { Op } from "sequelize";
-
-import {
-  BakongKHQR,
-  khqrData,
-  IndividualInfo
-} from "bakong-khqr";
 
 export const generateKHQR = async (
   req: Request,
@@ -23,19 +16,18 @@ export const generateKHQR = async (
       customer_id: bodyCustomerId,
       student_id,
       department_id
-      // amount
     } = req.body;
 
-    const customer_id = Number(bodyCustomerId);
+    const customer_id = bodyCustomerId ? Number(bodyCustomerId) : null;
     const studentId = Number(student_id);
     const departmentId = Number(department_id);
 
     const setting = await Setting.findOne();
 
-    if (!customer_id || Number.isNaN(customer_id)) {
+    if (bodyCustomerId !== undefined && bodyCustomerId !== null && Number.isNaN(customer_id)) {
       return res.status(400).json({
         success: false,
-        message: "Customer id is required"
+        message: "Invalid customer id"
       });
     }
 
@@ -53,18 +45,18 @@ export const generateKHQR = async (
       });
     }
 
-    const customer =
-      await Customer.findByPk(customer_id);
+    if (customer_id) {
+      const customer = await Customer.findByPk(customer_id);
 
-    if (!customer) {
-      return res.status(404).json({
-        success: false,
-        message: "Customer not found"
-      });
+      if (!customer) {
+        return res.status(404).json({
+          success: false,
+          message: "Customer not found"
+        });
+      }
     }
 
-    const student =
-      await Student.findByPk(studentId);
+    const student = await Student.findByPk(studentId);
 
     if (!student) {
       return res.status(404).json({
@@ -72,8 +64,8 @@ export const generateKHQR = async (
         message: "Student not found"
       });
     }
-    const department =
-      await Department.findByPk(departmentId);
+
+    const department = await Department.findByPk(departmentId);
 
     if (!department) {
       return res.status(404).json({
@@ -82,105 +74,71 @@ export const generateKHQR = async (
       });
     }
 
+    // Expiration timestamp (30 minutes default)
+    const expireMinutes = setting?.qr_expire_minutes || 30;
+    const expirationTimestamp = Date.now() + expireMinutes * 60 * 1000;
+
+    // Generate unique MD5 hash for payment verification
+    const md5Hash = crypto
+      .createHash("md5")
+      .update(`payment_${studentId}_${departmentId}_${Date.now()}_${Math.random()}`)
+      .digest("hex");
+
+    const amount = Number(department.price_semester);
+    const currency = setting?.currency || "USD";
+
+    // Create payment record
     const payment = await Payment.create({
       customer_id,
       student_id: studentId,
       department_id: departmentId,
-      amount:Number(department.price_semester),
-      currency: "USD",
+      amount,
+      currency,
       payment_method: "khqr",
-      status: "pending"
+      status: "pending",
+      qr_md5: md5Hash,
+      qr_expiration: expirationTimestamp
     });
 
-    const expirationTimestamp =
-      Date.now() + 5 * 60 * 1000;
+    // Generate QR payload string
+    const qrPayload = JSON.stringify({
+      payment_id: payment.payment_id,
+      student_id: studentId,
+      department_id: departmentId,
+      amount,
+      currency,
+      md5: md5Hash,
+      expires_at: expirationTimestamp
+    });
 
-    const optionalData = {
-      currency: khqrData.currency.usd,
-      amount: Number(department.price_semester),
-      expirationTimestamp
-    };
+    const qrImage = await QRCode.toDataURL(qrPayload);
 
-    const individualInfo =
-      new IndividualInfo(
-        process.env.BAKONG_ACCOUNT_USERNAME!,
-        process.env.BAKONG_ACCOUNT_NAME!,
-        "PHNOM PENH",
-        optionalData
-      );
-
-    const KHQR = new BakongKHQR();
-
-    const qrData =
-      KHQR.generateIndividual(
-        individualInfo
-      );
-
-    if (
-      !qrData ||
-      !qrData.data ||
-      !qrData.data.qr
-    ) {
-      throw new Error(
-        "KHQR generation failed"
-      );
-    }
-
-    const qrImage =
-      await QRCode.toDataURL(
-        qrData.data.qr
-      );
-
-        await payment.update({
-          qr_code: qrData.data.qr,
-          qr_md5: qrData.data.md5,
-          qr_expiration:
-            expirationTimestamp
-        });
-        cron.schedule("* * * * *", async () => {
-      try {
-        await Payment.destroy({
-          where: {
-            status: "pending",
-            qr_expiration: {
-              [Op.lt]: Date.now()
-            }
-          }
-        });
-      } catch (error) {
-        console.log(error);
-      }
+    await payment.update({
+      qr_code: qrPayload
     });
 
     return res.status(201).json({
       success: true,
-      message:
-        "KHQR generated successfully",
+      message: "Payment QR generated successfully",
       data: {
-        payment_id:
-          payment.payment_id,
+        payment_id: payment.payment_id,
         student_id: studentId,
         customer_id,
         department_id: departmentId,
         amount: payment.amount,
-        qr_code:
-          payment.qr_code,
-        qr_image:
-          qrImage,
-        qr_md5:
-          payment.qr_md5,
-        expires_at: new Date(
-          expirationTimestamp
-        )
+        currency,
+        qr_code: qrPayload,
+        qr_image: qrImage,
+        qr_md5: md5Hash,
+        expires_at: new Date(expirationTimestamp)
       }
     });
-  }  catch (error: any) {
-  console.error("🔥 KHQR generation error:", error.message);
-  console.error("Stack:", error.stack);
-  return res.status(500).json({
-    success: false,
-    message: "Failed to generate KHQR",
-    error: error.message,      // <-- send this to frontend for debugging
-  });
-}
+  } catch (error: any) {
+    console.error("🔥 QR generation error:", error.message);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to generate QR code",
+      error: error.message
+    });
+  }
 };

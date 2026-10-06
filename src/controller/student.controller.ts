@@ -1,7 +1,9 @@
 import { Request, Response } from "express";
 import Student from "../models/student.model";
 import Enrollment from "../models/enrollment.model";
+import Payment from "../models/payment.model";
 import Setting from "../models/setting.model";
+import { sequelize } from "../migrations/index";
 
 const toOptionalInteger = (value: unknown) => {
   if (value === "" || value === null || value === undefined) {
@@ -139,10 +141,16 @@ export const updateStudent = async (
   res: Response
 ) => {
   try {
-    const student_id = Number(req.params.id);
+    const rawId = req.params.id;
+    const student_id = Number(rawId);
 
-    const student =
-      await Student.findByPk(student_id);
+    if (!student_id || Number.isNaN(student_id)) {
+      return res.status(400).json({
+        message: "Invalid student id."
+      });
+    }
+
+    const student = await Student.findByPk(student_id);
 
     if (!student) {
       return res.status(404).json({
@@ -162,28 +170,35 @@ export const updateStudent = async (
       customer_id
     } = req.body;
 
-    if (
-      gender &&
-      !["Male", "Female"].includes(gender)
-    ) {
-      return res.status(400).json({
-        message: "Gender must be Male or Female."
-      });
+    let cleanGender = student.gender;
+    if (gender !== undefined && gender !== null && gender !== "") {
+      const g = String(gender).trim().toLowerCase();
+      if (g === "male" || g === "m") {
+        cleanGender = "Male";
+      } else if (g === "female" || g === "f") {
+        cleanGender = "Female";
+      } else {
+        return res.status(400).json({
+          message: "Gender must be Male or Female."
+        });
+      }
     }
 
     let photo = student.photo;
 
     if (req.file) {
-
       if (student.photo) {
-
         const oldPhoto = path.join(
           process.cwd(),
           student.photo.replace(/^\//, "")
         );
 
         if (fs.existsSync(oldPhoto)) {
-          fs.unlinkSync(oldPhoto);
+          try {
+            fs.unlinkSync(oldPhoto);
+          } catch (e) {
+            console.error("Error removing old photo:", e);
+          }
         }
       }
 
@@ -191,38 +206,43 @@ export const updateStudent = async (
     }
 
     if (email) {
+      const cleanEmail = email.trim().toLowerCase();
 
-      const cleanEmail =
-        email.trim().toLowerCase();
-
-      const emailExists =
-        await Student.findOne({
+      if (cleanEmail !== student.email) {
+        const emailExists = await Student.findOne({
           where: { email: cleanEmail }
         });
 
-      if (
-        emailExists &&
-        emailExists.student_id !==
-          student.student_id
-      ) {
+        if (emailExists && emailExists.student_id !== student.student_id) {
+          return res.status(400).json({
+            message: "Email already exists."
+          });
+        }
+      }
+    }
+
+    if (student_code && student_code !== student.student_code) {
+      const existingCode = await Student.findOne({
+        where: { student_code }
+      });
+
+      if (existingCode && existingCode.student_id !== student.student_id) {
         return res.status(400).json({
-          message: "Email already exists."
+          message: "Student code already exists."
         });
       }
-
-      student.email = cleanEmail;
     }
 
     await student.update({
-      student_code,
-      first_name,
-      last_name,
-      gender,
-      date_of_birth,
-      phone,
-      address,
-      customer_id:
-        toOptionalInteger(customer_id),
+      student_code: student_code !== undefined && student_code !== null && student_code !== "" ? String(student_code).trim() : student.student_code,
+      first_name: first_name !== undefined && first_name !== null && first_name !== "" ? String(first_name).trim() : student.first_name,
+      last_name: last_name !== undefined && last_name !== null && last_name !== "" ? String(last_name).trim() : student.last_name,
+      gender: cleanGender,
+      date_of_birth: date_of_birth !== undefined ? (date_of_birth || null) : student.date_of_birth,
+      email: email ? email.trim().toLowerCase() : student.email,
+      phone: phone !== undefined ? (phone ? String(phone).trim() : null) : student.phone,
+      address: address !== undefined ? (address ? String(address).trim() : null) : student.address,
+      customer_id: customer_id !== undefined ? (customer_id ? Number(customer_id) : null) : student.customer_id,
       photo
     });
 
@@ -244,21 +264,27 @@ export const deleteStudent = async (
   req: Request,
   res: Response
 ) => {
-  try{
+  const transaction = await sequelize.transaction();
+  try {
     const student_id = Number(req.params.id);
-    const student = await Student.findByPk(student_id);
-    if(!student){
-      return res.status(404).json({message: "Student not found !"})
+    const student = await Student.findByPk(student_id, { transaction });
+    if (!student) {
+      await transaction.rollback();
+      return res.status(404).json({ message: "Student not found !" });
     }
 
-    await student.destroy();
-    return res.json({message : "Student deleted "})
+    await Enrollment.destroy({ where: { student_id }, transaction });
+    await Payment.destroy({ where: { student_id }, transaction });
+    await student.destroy({ transaction });
 
-  }catch(err){
+    await transaction.commit();
+    return res.json({ message: "Student deleted successfully" });
+  } catch (err: any) {
+    await transaction.rollback();
     console.log("Error:", err);
-    res.status(500).json({message: "Can't delete student !"})
+    return res.status(500).json({ message: "Can't delete student !", error: err.message });
   }
-}
+};
 
 export const getStudentProfile = async (
   req: Request,

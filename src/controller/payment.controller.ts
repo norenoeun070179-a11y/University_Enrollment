@@ -17,36 +17,28 @@ export const getPayments = async (
         res.status(500).json({ message: "Failed to get payments" });
     }
 };
-interface AuthRequest extends Request {
-  user?: any;
-}
-export const getPaymentByid = async( 
-  req:AuthRequest,
-  res:Response
-) =>{
-  try{
+export const getPaymentByid = async (
+  req: Request,
+  res: Response
+) => {
+  try {
     const payment_id = Number(req.params.id);
     const data = await Payment.findByPk(payment_id);
     
-    if(!data){
-      res.status(404).json({
-        message: "Paid not found!"
-      })
-    }
-    res.json({
-      data
-    })
-    if(req.user.payment_id !== payment_id){
-      res.status(404).json({
-        message: "Paid not found!"
-      })  
+    if (!data) {
+      return res.status(404).json({
+        message: "Payment not found!"
+      });
     }
 
-  }catch(error){
+    return res.json({
+      data
+    });
+  } catch (error) {
     console.error(error);
-    res.status(500).json({ message: "Failed to get payments" });
+    return res.status(500).json({ message: "Failed to get payments" });
   }
-}
+};
 
 export const deletePayment = async (
   req: Request,

@@ -12,22 +12,23 @@ export const authMiddleware = (
   res: Response,
   next: NextFunction
 ) => {
-  
-   try {
-
-  const token = req.cookies.token;
+  try {
+    const authHeader = req.headers.authorization;
+    const token =
+      req.cookies?.token ||
+      (authHeader && authHeader.startsWith("Bearer ")
+        ? authHeader.substring(7)
+        : null);
 
     if (!token) {
-      return res.status(401).json({ message: "Invalid token format" });
+      return res.status(401).json({ message: "Authentication token required" });
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET as string);
-
     req.user = decoded;
-
     next();
   } catch (err) {
-    return res.status(401).json({ message: "Unauthorized" });
+    return res.status(401).json({ message: "Invalid or expired token" });
   }
 };
 

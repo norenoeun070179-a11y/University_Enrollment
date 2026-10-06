@@ -14,6 +14,12 @@ export const sequelize = new Sequelize(
         rejectUnauthorized: false,
       },
     },
+    pool: {
+      max: 25,
+      min: 2,
+      acquire: 30000,
+      idle: 10000
+    }
   }
 );
 
@@ -225,6 +231,54 @@ const ensureScheduleCourseColumn = async (): Promise<void> => {
   `);
 };
 
+const ensurePaymentStatusEnum = async (): Promise<void> => {
+  await sequelize.query(`
+    DO $$
+    BEGIN
+      IF EXISTS (SELECT 1 FROM pg_type WHERE typname = 'enum_payments_status') THEN
+        ALTER TYPE "enum_payments_status" ADD VALUE IF NOT EXISTS 'expired';
+      END IF;
+    END $$;
+  `);
+};
+
+const ensureCascadeDeleteConstraints = async (): Promise<void> => {
+  await sequelize.query(`
+    DO $$
+    BEGIN
+      -- Update payments -> students FK to CASCADE
+      IF EXISTS (
+        SELECT 1 FROM information_schema.table_constraints
+        WHERE constraint_name = 'payments_student_id_fkey'
+      ) THEN
+        ALTER TABLE "payments" DROP CONSTRAINT "payments_student_id_fkey";
+      END IF;
+
+      IF to_regclass('public.payments') IS NOT NULL AND to_regclass('public.students') IS NOT NULL THEN
+        ALTER TABLE "payments"
+        ADD CONSTRAINT "payments_student_id_fkey"
+        FOREIGN KEY ("student_id") REFERENCES "students"("student_id")
+        ON DELETE CASCADE ON UPDATE CASCADE;
+      END IF;
+
+      -- Update enrollments -> students FK to CASCADE
+      IF EXISTS (
+        SELECT 1 FROM information_schema.table_constraints
+        WHERE constraint_name = 'enrollments_student_id_fkey'
+      ) THEN
+        ALTER TABLE "enrollments" DROP CONSTRAINT "enrollments_student_id_fkey";
+      END IF;
+
+      IF to_regclass('public.enrollments') IS NOT NULL AND to_regclass('public.students') IS NOT NULL THEN
+        ALTER TABLE "enrollments"
+        ADD CONSTRAINT "enrollments_student_id_fkey"
+        FOREIGN KEY ("student_id") REFERENCES "students"("student_id")
+        ON DELETE CASCADE ON UPDATE CASCADE;
+      END IF;
+    END $$;
+  `);
+};
+
 const migrate = async (): Promise<void> => {
   try {
     await sequelize.authenticate();
@@ -247,6 +301,8 @@ const migrate = async (): Promise<void> => {
     await normalizeIntegerColumns();
     await ensurePaymentDepartmentColumn();
     await ensureScheduleCourseColumn();
+    await ensurePaymentStatusEnum();
+    await ensureCascadeDeleteConstraints();
     
     await sequelize.sync({ alter: true });
 

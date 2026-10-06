@@ -16,7 +16,7 @@ class Payment extends Model<
 
   declare student_id: number;
 
-  declare customer_id: number;
+  declare customer_id: number | null;
   declare department_id: number;
 
   declare amount: number;
@@ -88,7 +88,8 @@ Payment.init(
         "pending",
         "paid",
         "failed",
-        "cancelled"
+        "cancelled",
+        "expired"
       ),
       defaultValue: "pending"
     },
