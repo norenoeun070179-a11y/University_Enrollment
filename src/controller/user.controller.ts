@@ -141,8 +141,8 @@ export const loginUser = async (req: Request, res: Response) => {
     );
     res.cookie("token", token ,{
       httpOnly: true,
-      secure: false,      // true នៅ Production (HTTPS)
-      sameSite: "lax",    // "none" ប្រសិនបើ Frontend និង Backend នៅ Domain ខុសគ្នា + HTTPS
+      secure: true,      // true នៅ Production (HTTPS)
+      sameSite: "none",    // "none" ប្រសិនបើ Frontend និង Backend នៅ Domain ខុសគ្នា + HTTPS
       maxAge: 24 * 60 * 60 * 1000,
     })
     return res.json({
@@ -200,17 +200,17 @@ export const adminLogin = async (req: Request, res: Response) => {
       {
         id: user.user_id,
         email: user.email,
-        role: user.role
+        role: user.role 
       },
       process.env.JWT_SECRET as string,
       {
         expiresIn: "1d"
-      }
+      }  
     );
     res.cookie("token", token ,{
       httpOnly: true,
-      secure: false,      // true នៅ Production (HTTPS)
-      sameSite: "lax",    // "none" ប្រសិនបើ Frontend និង Backend នៅ Domain ខុសគ្នា + HTTPS
+      secure: true,      // true នៅ Production (HTTPS)
+      sameSite: "none",    // "none" ប្រសិនបើ Frontend និង Backend នៅ Domain ខុសគ្នា + HTTPS
       maxAge: 24 * 60 * 60 * 1000,
     })
 
